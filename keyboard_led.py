@@ -1,8 +1,8 @@
-"""Controllo LED della SIDE-KEYBOARD.
+"""SIDE-KEYBOARD LED control.
 
-Il device droppa le scritture per-key ravvicinate (~250ms), quindi ogni
-scrittura passa da un thread worker che la processa da sola con pausa.
-All'avvio salva la modalita' luce corrente e la ripristina a fine sessione.
+The device drops per-key writes that are too close together (~250ms), so every
+write goes through a worker thread that processes it alone with a pause.
+On startup it saves the current light mode and restores it at session end.
 """
 
 import threading
@@ -25,8 +25,8 @@ class KeyboardLed:
         self.gap = gap
         self.transport = None
         self._lock = threading.Lock()
-        self._pending = {}          # {index: (r,g,b)} da applicare
-        self._last = {}             # ultimi colori applicati per indice
+        self._pending = {}          # {index: (r,g,b)} to apply
+        self._last = {}             # last colors applied per index
         self._running = True
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._open()
@@ -39,7 +39,7 @@ class KeyboardLed:
     def _open(self):
         info = find_config_interface()
         if info is None:
-            raise DeviceUnavailable("interfaccia vendor SIDE-KEYBOARD non trovata")
+            raise DeviceUnavailable("SIDE-KEYBOARD vendor interface not found")
         self.transport = HidTransport(info["path"])
 
     def close(self):
@@ -86,7 +86,7 @@ class KeyboardLed:
                               0, 0, 0, r, g, b])
 
     def set_colors(self, colors):
-        """Accoda colori {index: (r,g,b)}; applica solo gli indici cambiati."""
+        """Queues colors {index: (r,g,b)}; applies only the changed indices."""
         with self._lock:
             for index, rgb in colors.items():
                 if self._last.get(index) != rgb:
@@ -106,7 +106,7 @@ class KeyboardLed:
                         self._last[index] = rgb
                         time.sleep(self.gap)
                 except Exception:
-                    # device sconnesso: tenta di riaprire, poi riapplica tutto
+                    # device disconnected: try to reopen, then reapply everything
                     self._reopen()
             else:
                 time.sleep(0.05)

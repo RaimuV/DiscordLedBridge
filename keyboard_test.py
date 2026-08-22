@@ -1,12 +1,12 @@
-"""Milestone B - test di comunicazione con la SIDE-KEYBOARD.
+"""Milestone B - communication test with the SIDE-KEYBOARD.
 
-Verifica il protocollo SDCX su Windows (hidapi):
-  1. trova l'interfaccia vendor (usage page 0xFF00)
-  2. legge config device, light config, key infos, keymap, colori per-key
-  3. identifica i tasti reali e prova ad accendere UN LED in modalita' Custom
-  4. ripristina modalita' luce e colori precedenti
+Verifies the SDCX protocol on Windows (hidapi):
+  1. finds the vendor interface (usage page 0xFF00)
+  2. reads device config, light config, key infos, keymap, per-key colors
+  3. identifies the real keys and tries to light up ONE LED in Custom mode
+  4. restores the previous light mode and colors
 
-Uso:  python keyboard_test.py [--probe-only] [--no-write]
+Usage:  python keyboard_test.py [--probe-only] [--no-write]
 """
 
 import argparse
@@ -23,7 +23,7 @@ USAGE = 0x02
 REPORT_SIZE = 64
 BACKUP_PATH = "led_backup.json"
 
-G = 0x06  # gruppo config
+G = 0x06  # config group
 
 C_GET_CONFIG = 5
 C_GET_KEY_INFOS = 7
@@ -39,11 +39,11 @@ READ_CHUNK = 56
 
 
 class HidTransport:
-    """Trasporto 64 byte su interfaccia vendor, report ID 0.
+    """64-byte transport over vendor interface, report ID 0.
 
-    hidapi su Windows vuole il report ID come primo byte: il byte 0x00
-    (report non numerato) viene eliminato prima della WriteFile, quindi
-    si passa [0x00] + 64 byte. In lettura il report ID viene rimosso.
+    hidapi on Windows expects the report ID as the first byte: the 0x00 byte
+    (unnumbered report) is stripped before WriteFile, so [0x00] + 64 bytes
+    are passed. On read, the report ID is removed.
     """
 
     def __init__(self, path):
@@ -67,7 +67,7 @@ class HidTransport:
     def read(self, timeout_ms=1000):
         data = self.dev.read(REPORT_SIZE, timeout_ms)
         if not data:
-            raise TimeoutError("nessuna risposta dal device")
+            raise TimeoutError("no response from device")
         return bytes(data)
 
     def request(self, payload):
@@ -75,7 +75,7 @@ class HidTransport:
         while True:
             data = self.read()
             if len(data) >= 2 and data[0] == 0xAA and data[1] == 0xFA:
-                print(f"  [skip evento luce AA FA: {data[:8].hex(' ')}]")
+                print(f"  [skip light event AA FA: {data[:8].hex(' ')}]")
                 continue
             return data
 
@@ -148,7 +148,7 @@ def save_backup(light, colors):
     data = {"light": light, "colors": {str(k): list(v) for k, v in colors.items()}}
     with open(BACKUP_PATH, "w") as f:
         json.dump(data, f, indent=2)
-    print(f"Backup stato luce salvato in {BACKUP_PATH}")
+    print(f"Light state backup saved to {BACKUP_PATH}")
 
 
 def restore_backup(tr):
@@ -156,13 +156,13 @@ def restore_backup(tr):
         with open(BACKUP_PATH) as f:
             data = json.load(f)
     except (OSError, ValueError):
-        print(f"Nessun backup trovato ({BACKUP_PATH}).")
+        print(f"No backup found ({BACKUP_PATH}).")
         sys.exit(1)
     tr.request([G, C_SET_LIGHT, 11, 0, 0, *light_block(data["light"])])
     for idx, (cr, cg, cb) in data["colors"].items():
         tr.write([G, C_SET_RGB_SINGLE, 3, *u16le(int(idx) * 3), 0, 0, 0, cr, cg, cb])
         time.sleep(0.02)
-    print("Ripristinata modalita' luce e colori dal backup.")
+    print("Restored light mode and colors from backup.")
 
 
 def read_key_infos(tr):
@@ -207,22 +207,22 @@ def keymap_name(entry):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--probe-only", action="store_true", help="solo lettura, nessuna scrittura LED")
+    ap.add_argument("--probe-only", action="store_true", help="read only, no LED writes")
     ap.add_argument("--restore", action="store_true",
-                    help="ripristina modalita' luce e colori dal backup salvato")
-    ap.add_argument("--key", type=int, default=None, help="indice tasto da provare (default: auto)")
-    ap.add_argument("--color", default="#00F0FF", help="colore test in #rrggbb")
+                    help="restore light mode and colors from the saved backup")
+    ap.add_argument("--key", type=int, default=None, help="key index to test (default: auto)")
+    ap.add_argument("--color", default="#00F0FF", help="test color in #rrggbb")
     ap.add_argument("--keep", action="store_true",
-                    help="dopo il test lascia i LED accesi invece di ripristinare")
+                    help="after the test keep the LEDs on instead of restoring")
     args = ap.parse_args()
 
     info = find_config_interface()
     if info is None:
-        print(f"ERRORE: interfaccia vendor {VID:04x}:{PID:04x} "
-              f"(usage {USAGE_PAGE:04x}/{USAGE:02x}) non trovata")
+        print(f"ERROR: vendor interface {VID:04x}:{PID:04x} "
+              f"(usage {USAGE_PAGE:04x}/{USAGE:02x}) not found")
         sys.exit(1)
 
-    print("Interfaccia trovata:")
+    print("Interface found:")
     for k in ("path", "product_string", "manufacturer_string", "serial_number",
               "usage_page", "usage", "interface_number"):
         print(f"  {k}: {info[k]}")
@@ -236,35 +236,35 @@ def main():
         # 1. config device
         resp = tr.request([G, C_GET_CONFIG])
         cfg = parse_config(resp)
-        print("Config device:")
+        print("Device config:")
         for k, v in cfg.items():
             print(f"  {k}: {v}")
         print()
 
-        # 2. light config corrente (da ripristinare a fine test)
+        # 2. current light config (to be restored at test end)
         light = parse_light(tr.request([G, C_GET_LIGHT]))
-        print("Light config corrente:", light)
+        print("Current light config:", light)
         print()
 
-        # 3. key infos (tabella factory, 4 byte/tasto, copre indici 0..143)
+        # 3. key infos (factory table, 4 bytes/key, covers indices 0..143)
         raw = read_key_infos(tr)
         mapped = []
         for idx in range(0, len(raw) // 4):
             entry = bytes(raw[4 * idx : 4 * idx + 4])
             if entry != b"\0\0\0\0":
                 mapped.append((idx, entry))
-        print(f"Tasti mappati dalla tabella factory ({len(mapped)}):")
+        print(f"Keys mapped from the factory table ({len(mapped)}):")
         for idx, entry in mapped:
             print(f"  index {idx:>3}: {keymap_name(entry)}")
         print()
 
         if not mapped:
-            print("Nessun tasto mappato: device non risponde come atteso.")
+            print("No keys mapped: device does not respond as expected.")
             sys.exit(1)
 
         max_idx = max(i for i, _ in mapped)
 
-        # 4. keymap layer 0 per gli stessi indici
+        # 4. layer 0 keymap for the same indices
         span_map = (max_idx + 1) * 4
         km = read_keymap(tr, span_map)
         print("Keymap layer 0:")
@@ -273,36 +273,36 @@ def main():
             print(f"  index {idx:>3}: {keymap_name(entry)}")
         print()
 
-        # 5. colori per-key correnti (da ripristinare)
+        # 5. current per-key colors (to be restored)
         span_rgb = (max_idx + 1) * 3
         rgb = read_key_colors(tr, span_rgb)
         cur_colors = {i: tuple(rgb[3 * i : 3 * i + 3]) for i, _ in mapped}
-        print("Colori correnti:", {k: f"#{r:02x}{g:02x}{b:02x}" for k, (r, g, b) in cur_colors.items()})
+        print("Current colors:", {k: f"#{r:02x}{g:02x}{b:02x}" for k, (r, g, b) in cur_colors.items()})
         print()
 
         if args.probe_only:
-            print("PROBE SOLO LETTURA: nessuna scrittura eseguita.")
+            print("READ-ONLY PROBE: no writes performed.")
             return
 
-        # 6. scelta dei 3 tasti LED: tra i tasti principali (indici 0-5)
-        #    preferisci quelli consumer/media, altrimenti i primi 3
+        # 6. pick the 3 LED keys: among the main keys (indices 0-5)
+        #    prefer consumer/media ones, otherwise the first 3
         main = [i for i, _ in mapped if i <= 5]
         media = [i for i, e in mapped if i <= 5 and e[0] == 48]
         if len(media) >= 3:
             chosen = media[:3]
-            reason = "tasti consumer/media"
+            reason = "consumer/media keys"
         else:
             chosen = main[:3] if len(main) >= 3 else [m[0] for m in mapped[:3]]
-            reason = "primi indici mappati"
-        print(f"Tasti scelti per i LED: {chosen} ({reason})")
+            reason = "first mapped indices"
+        print(f"Keys chosen for LEDs: {chosen} ({reason})")
 
         key = args.key if args.key is not None else chosen[0]
         r, g, b = [int(args.color.lstrip("#")[i : i + 2], 16) for i in (0, 2, 4)]
-        print(f"Test: tasto {key} -> #{r:02x}{g:02x}{b:02x}")
+        print(f"Test: key {key} -> #{r:02x}{g:02x}{b:02x}")
 
         save_backup(light, cur_colors)
 
-        # 7. modalita' Custom (5) con i default del firmware
+        # 7. Custom mode (5) with firmware defaults
         resp = tr.request([G, C_GET_MODE_DEFAULTS, 0, 0, 0, 1, 0, 5])
         defaults = parse_light(resp)
         defaults["mode"] = 5
@@ -313,34 +313,34 @@ def main():
         ]
         if defaults["mode"] == 0:
             block[6] = 0
-        print("Imposto modalita' Custom:", defaults)
+        print("Setting Custom mode:", defaults)
         tr.request([G, C_SET_LIGHT, 11, 0, 0, *block])
 
-        # 8. scrivi colore e verifica read-back dalla tabella per-key
+        # 8. write color and verify read-back from the per-key table
         def set_key_color(idx, rgb):
             r_, g_, b_ = rgb
             tr.write([G, C_SET_RGB_SINGLE, 3, *u16le(idx * 3), 0, 0, 0, r_, g_, b_])
 
         set_key_color(key, (r, g, b))
-        # NB: il read-back [19] e' inaffidabile su indici dispari (restituisce
-        # dati spuri); la conferma reale e' visiva sui keycap.
+        # NB: the read-back [19] is unreliable on odd indices (returns
+        # spurious data); the real confirmation is visual on the keycaps.
         time.sleep(0.25)
         got = read_key_colors(tr, span_rgb)[3 * key : 3 * key + 3]
         ok = got == bytes((r, g, b))
-        print(f"Read-back tasto {key}: {tuple(got)} (atteso {(r, g, b)}) -> "
-              f"{'OK' if ok else 'inaffidabile, conferma visiva'}")
-        print(f"Scritto colore su tasto {key}.")
+        print(f"Read-back key {key}: {tuple(got)} (expected {(r, g, b)}) -> "
+              f"{'OK' if ok else 'unreliable, visual confirmation'}")
+        print(f"Color written to key {key}.")
 
         if args.keep:
             for idx in chosen:
                 set_key_color(idx, (r, g, b))
                 time.sleep(0.25)
-            print(f"LED lasciati accesi su {chosen} ({args.color}). "
-                  "Per ripristinare la luce precedente:")
+            print(f"LEDs left on on {chosen} ({args.color}). "
+                  "To restore the previous light:")
             print("  python keyboard_test.py --restore")
             return
 
-        # 9. ripristino: modalita' luce precedente + colori originali
+        # 9. restore: previous light mode + original colors
         restore_backup(tr)
 
 

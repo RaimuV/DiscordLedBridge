@@ -1,9 +1,9 @@
-"""Monitor dello stato voce di Discord via RPC locale.
+"""Monitors Discord voice state via local RPC.
 
-Thread che tiene aperta la connessione alla pipe discord-ipc-0, si autentica,
-legge lo stato iniziale e resta in ascolto degli eventi VOICE_SETTINGS_UPDATE.
-Alla disconnessione (es. riavvio di Discord) si riconnette con backoff
-esponenziale. Ogni cambio di stato chiama on_state({'mute': bool, 'deaf': bool}).
+Thread that keeps the connection to the discord-ipc-0 pipe open, authenticates,
+reads the initial state and listens for VOICE_SETTINGS_UPDATE events.
+On disconnection (e.g. Discord restart) it reconnects with exponential
+backoff. Each state change calls on_state({'mute': bool, 'deaf': bool}).
 """
 
 import threading
@@ -50,7 +50,7 @@ class DiscordMonitor:
                 with DiscordIPC() as rpc:
                     rpc.handshake(cred["client_id"])
                     self._authenticate(rpc, cred)
-                    self._log("collegato e autenticato a Discord")
+                    self._log("connected and authenticated to Discord")
                     settings = rpc.get_voice_settings()
                     self._dispatch(settings)
                     rpc.subscribe("VOICE_SETTINGS_UPDATE")
@@ -60,16 +60,16 @@ class DiscordMonitor:
                 self._log(f"RPC: {exc}")
                 backoff = self._sleep_backoff(backoff)
             except SystemExit:
-                self._log("credenziali non configurate (esegui: python discord_test.py --setup)")
+                self._log("credentials not configured (run: python discord_test.py --setup)")
                 backoff = self._sleep_backoff(backoff)
             except Exception as exc:
-                self._log(f"errore monitor: {exc}")
+                self._log(f"monitor error: {exc}")
                 backoff = self._sleep_backoff(backoff)
 
     def _sleep_backoff(self, backoff):
         if not self._running:
             return backoff
-        self._log(f"riconnessione tra {backoff:.0f}s")
+        self._log(f"reconnecting in {backoff:.0f}s")
         waited = 0.0
         while waited < backoff and self._running:
             time.sleep(0.2)
@@ -83,7 +83,7 @@ class DiscordMonitor:
             rpc.authenticate(cred["access_token"])
         except DiscordRPCError as exc:
             if any(code in str(exc) for code in _TOKEN_ERRORS):
-                self._log("token scaduto, aggiorno con refresh token")
+                self._log("token expired, refreshing with refresh token")
                 cred = refresh_access_token(cred)
                 rpc.authenticate(cred["access_token"])
             else:
@@ -104,7 +104,7 @@ class DiscordMonitor:
                 self._dispatch(frame.get("data", {}))
             return False
 
-        # l'evento di stop e' gestito dal loop chiamante via stop()
+        # the stop event is handled by the calling loop via stop()
         while self._running:
             try:
                 op, frame = rpc.recv_frame(timeout=0.2)
@@ -112,7 +112,7 @@ class DiscordMonitor:
                 continue
             if op == 2:  # OP_CLOSE
                 raise DiscordRPCError(
-                    f"chiusa da Discord (code {frame.get('code')}): "
+                    f"closed by Discord (code {frame.get('code')}): "
                     f"{frame.get('message')}")
             if op == 1 and frame.get("evt"):
                 handler(frame)

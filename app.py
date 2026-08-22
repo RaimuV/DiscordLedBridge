@@ -1,12 +1,12 @@
 """DiscordLedBridge - app.py
 
-Coordina DiscordMonitor (stato voce) e KeyboardLed (colori keycap).
-Stato Discord -> LED + (opzionale) tray icon.
+Coordinates DiscordMonitor (voice state) and KeyboardLed (keycap colors).
+Discord state -> LED + (optional) tray icon.
 
 Config: %LOCALAPPDATA%\\DiscordLedBridge\\config.json
-Credenziali: %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json (setup via discord_test.py)
+Credentials: %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json (setup via discord_test.py)
 
-Esegui:  python app.py [--no-tray] [--config PATH]
+Run:  python app.py [--no-tray] [--config PATH]
 """
 
 import argparse
@@ -38,10 +38,10 @@ DEFAULT_CONFIG = {
 }
 
 TRAY_COLORS = {
-    (False, False): "#00F0FF",  # tutto ok
-    (True, False):  "#FFFF00",  # solo mic muto
-    (True, True):   "#FF0000",  # audio mutato
-    (False, True):  "#FF0000",  # solo cuffie mute
+    (False, False): "#00F0FF",  # all ok
+    (True, False):  "#FFFF00",  # mic muted only
+    (True, True):   "#FF0000",  # audio muted
+    (False, True):  "#FF0000",  # headphones muted only
 }
 
 
@@ -99,10 +99,10 @@ class App:
                     "DiscordLedBridge",
                     make_icon(TRAY_COLORS[(False, False)]),
                     "DiscordLedBridge",
-                    menu=pystray.Menu(pystray.MenuItem("Esci", self._on_quit)),
+                    menu=pystray.Menu(pystray.MenuItem("Exit", self._on_quit)),
                 )
             except Exception as exc:
-                print(f"tray icon non disponibile ({exc}), proseguo senza")
+                print(f"tray icon unavailable ({exc}), continuing without it")
                 self.use_tray = False
         self.monitor = DiscordMonitor(on_state=self._on_state, on_log=self._on_log)
 
@@ -136,11 +136,11 @@ class App:
             self.tray.icon = make_icon(TRAY_COLORS[(state["mute"], state["deaf"])])
         with self._log_lock:
             if state["deaf"]:
-                label = "AUDIO MUTATO (deafen)"
+                label = "AUDIO MUTED (deafen)"
             elif state["mute"]:
-                label = "MIC MUTO"
+                label = "MIC MUTED"
             else:
-                label = "tutto ok"
+                label = "all ok"
             print(f"[stato] {label}")
 
     # -- ciclo di vita --------------------------------------------------------
@@ -170,22 +170,22 @@ class App:
 
 def main():
     ap = argparse.ArgumentParser(description="DiscordLedBridge")
-    ap.add_argument("--no-tray", action="store_true", help="disabilita la tray icon")
-    ap.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="percorso config.json")
+    ap.add_argument("--no-tray", action="store_true", help="disable the tray icon")
+    ap.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="config.json path")
     args = ap.parse_args()
 
     config = load_config(args.config)
     if not os.path.exists(args.config):
         save_config(config, args.config)
-        print(f"Config di default creato in {args.config}")
+        print(f"Default config created at {args.config}")
     use_tray = config["tray_icon"] and not args.no_tray
 
-    print(f"DiscordLedBridge avviato (config: {args.config})")
+    print(f"DiscordLedBridge started (config: {args.config})")
     try:
         App(config, use_tray).run()
     except DeviceUnavailable as exc:
-        print(f"ERRORE: {exc}")
-        print("Collega la SIDE-KEYBOARD e riprova.")
+        print(f"ERROR: {exc}")
+        print("Connect the SIDE-KEYBOARD and try again.")
         sys.exit(1)
 
 

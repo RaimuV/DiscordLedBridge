@@ -1,72 +1,67 @@
 # DiscordLedBridge
 
-Riflette lo stato voce di Discord (mic muto / cuffie mute) sui LED dei keycap
-della side-keyboard **SIDE-KEYBOARD** (SDINNOVATION, VID `0816` / PID `246E`,
-4 keycap con LED + rotella senza LED).
+Mirrors your Discord voice state (mic muted / headphones muted) onto the per-key
+LEDs of a **SIDE-KEYBOARD** macropad (SDINNOVATION, VID `0816` / PID `246E`,
+4 keycaps with LEDs + a rotary knob without LEDs).
 
-## Stato del progetto
+## How it works
 
-- Milestone B (LED): **fatta e verificata** su hardware.
-- Milestone A (RPC Discord): trasporto validato; **in attesa del setup OAuth**
-  (serve creare l'app Discord e dare il consenso una tantum).
-- Milestone C (bridge `app.py`): **fatta**, testata la parte LED; la parte
-  Discord si completa al setup OAuth.
-- Milestone D (packaging): **avvio manuale** (niente autostart per ora).
+A minimal background daemon reads `mute`/`deafen` from Discord's local RPC
+(named pipe `discord-ipc-0`, OAuth scopes `rpc rpc.voice.read`) and colors the
+keycap group 1+2:
 
-## Requisiti
+| State | Keycap 1 | Keycap 2 |
+|---|---|---|
+| All good (mic live) | blue | blue |
+| Mic muted | yellow | yellow |
+| Audio muted (deafen) | red | red |
 
-- Python 3.12 con: `hidapi`, `pywin32`, `psutil`, `pystray`, `Pillow`
-- Discord desktop in esecuzione
+Keycaps 3-4 stay off. Everything is configurable via `config.json`.
+
+## Requirements
+
+- Python 3.12 with: `hidapi`, `pywin32`, `psutil`, `pystray`, `Pillow`
+- Discord desktop running
 
 ```powershell
-python -m pip install hidapi pystray Pillow   # pywin32 e psutil gia' presenti
+python -m pip install -r requirements.txt
 ```
 
-## Setup OAuth (una tantum)
+## OAuth setup (one-time)
 
-1. Crea un'app su <https://discord.com/developers> (New Application).
-2. Tab **OAuth2** → **Redirects**: aggiungi `http://localhost:53123`.
-3. Sotto **Scopes** aggiungi `rpc rpc.voice.read` (lo scope `rpc` e' obbligatorio).
-4. Autorizzazione una tantum:
+1. Create an app at <https://discord.com/developers> (New Application).
+2. In **OAuth2** → **Redirects**, add `http://localhost:53123`.
+3. Run the one-time authorization:
 
 ```powershell
 python discord_test.py --setup --client-id <ApplicationID> --client-secret <ClientSecret>
 ```
 
-   Si apre il consenso dentro Discord (Authorize). Le credenziali finiscono in
-   `%LOCALAPPDATA%\DiscordLedBridge\credentials.json` con ACL ristrette al solo
-   utente. Il secret non viene mai messo nel repo.
+   A consent window opens inside Discord (click Authorize). Credentials are saved
+   to `%LOCALAPPDATA%\DiscordLedBridge\credentials.json` with ACLs restricted to
+   the current user only. The secret is never stored in the repo.
 
-5. Prova la lettura dello stato:
+4. Verify the voice state can be read:
 
 ```powershell
 python discord_test.py
 ```
 
-   Stampa `VOICE_SETTINGS -> {mute, deaf}` e resta in ascolto delle variazioni.
+   It prints `VOICE_SETTINGS -> {mute, deaf}` and stays listening for changes.
 
-## Avvio del bridge
+## Running the bridge
 
 ```powershell
 python app.py
 ```
 
-Il bridge imposta la modalita' luce Custom, colora i keycap e resta in ascolto.
-Tray icon opzionale (disattivabile da `config.json` o con `--no-tray`). All'uscita
-(menu tray "Esci" o Ctrl+C) ripristina la modalita' luce precedente.
+The bridge switches the pad to Custom lighting, colors the keycaps and keeps
+listening. Optional tray icon (disable it in `config.json` or with `--no-tray`).
+On exit (tray menu "Quit" or Ctrl+C) it restores the previous lighting mode.
 
-## Layout LED (default)
+## Configuration
 
-**Stato globale** mostrato dal gruppo keycap 1+2 (stesso colore su entrambi),
-keycap 3-4 spenti:
-
-| Stato | Keycap 1 | Keycap 2 |
-|---|---|---|
-| Tutto ok (mic vivo) | blu | blu |
-| Mic muto | giallo | giallo |
-| Audio mutato (deafen) | rosso | rosso |
-
-Configurabile in `config.json` (nella cartella del progetto, auto-creato al primo avvio):
+`config.json` lives in the project folder (auto-created on first run):
 
 ```json
 {
@@ -83,44 +78,44 @@ Configurabile in `config.json` (nella cartella del progetto, auto-creato al prim
 }
 ```
 
-- `group_keys`: indici dei keycap che mostrano lo stato globale.
-- `colors`: colore per ogni stato (`ok`, `mic_muted`, `deafened`).
-- `idle_keys`: indici tenuti spenti.
+- `group_keys`: keycap indices that show the global status.
+- `colors`: color for each state (`ok`, `mic_muted`, `deafened`).
+- `idle_keys`: indices kept off.
+- `led_gap_seconds`: pause between consecutive LED writes. The device drops
+  back-to-back writes, so don't go below ~0.2s.
 
-`led_gap_seconds` e' la pausa tra una scrittura LED e la successiva: il device
-droppa le scritture ravvicinate, quindi non abbassarlo sotto ~0.2s.
-
-## Strumenti di test
+## Testing tools
 
 ```powershell
-# lettura sola dello stato della tastiera (non scrive)
+# read-only dump of the pad state (no writes)
 python keyboard_test.py --probe-only
 
-# colora i keycap 0,1,2 e li lascia accesi
+# color keycaps 0,1,2 and leave them on
 python keyboard_test.py --keep --color "#00F0FF"
 
-# ripristina la modalita' luce precedente (da led_backup.json)
+# restore the previous lighting mode (from led_backup.json)
 python keyboard_test.py --restore
 ```
 
-## Note tecniche
+## Technical notes
 
-- Il device ha 4 keycap con LED (indici 0-3) + rotella senza LED (indici
-  16=mute, 17=vol+, 18=vol-). Gli indici 4-5 sono scrivibili ma senza LED fisico.
-- Protocollo SDCX/SDINNOVATION reverse-engineered da `parsaj-dev/sdcx-keypad`
-  (MIT), interface vendor usage page `0xFF00`, report 64 byte.
-- Su Windows le scritture HID richiedono il prefisso report-ID 0 (`[0x00] + 64B`).
-- Il read-back della tabella colori (`[19]`) e' inaffidabile su indici dispari:
-  la verifica corretta e' visiva.
+- The pad has 4 keycaps with LEDs (indices 0-3) plus a knob without LEDs
+  (indices 16=mute, 17=vol+, 18=vol-). Indices 4-5 are writable but have no
+  physical LEDs.
+- Protocol reverse-engineered from `parsaj-dev/sdcx-keypad` (MIT): vendor
+  interface, usage page `0xFF00`, 64-byte reports.
+- On Windows, HID writes need the report-ID 0 prefix (`[0x00] + 64 bytes`).
+- The per-key color read-back (`[19]`) is unreliable on odd indices: the correct
+  verification is visual.
 
-## Sicurezza
+## Security
 
-- `client_secret` e token vivono solo in `credentials.json` (ACL utente),
-  mai nel repo.
-- Il bridge scrive solo sull'interfaccia vendor del device locale.
+- `client_secret` and tokens live only in `credentials.json` (user-restricted
+  ACLs), never in the repo.
+- The bridge only writes to the vendor interface of the local device.
 
-## Licenza
+## License
 
-MIT. Il protocollo device e' reverse-engineered da
-[`parsaj-dev/sdcx-keypad`](https://github.com/parsaj-dev/sdcx-keypad) (MIT), non copia
-di codice: ne riusa i riferimenti pubblicati su protocollo e layout.
+MIT. The device protocol is reverse-engineered from
+[`parsaj-dev/sdcx-keypad`](https://github.com/parsaj-dev/sdcx-keypad) (MIT); no
+code is copied, only its published protocol and layout references are used.

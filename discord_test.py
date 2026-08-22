@@ -1,12 +1,12 @@
-"""Milestone A - test RPC locale di Discord.
+"""Milestone A - Discord local RPC test.
 
   python discord_test.py --setup --client-id X --client-secret Y
-      autorizzazione OAuth una tantum (consenso dentro Discord), salva credenziali
+      one-time OAuth authorization (consent inside Discord), saves credentials
   python discord_test.py
-      si collega, legge VOICE_SETTINGS, stampa mute/deafen, resta in ascolto 10s
+      connects, reads VOICE_SETTINGS, prints mute/deafen, listens for 10s
 
-Le credenziali vivono in %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json con ACL
-ristrette al solo utente; mai nel repo.
+Credentials live in %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json with ACL
+restricted to the current user only; never in the repo.
 """
 
 import argparse
@@ -29,11 +29,11 @@ DEFAULT_REDIRECT = "http://localhost:53123"
 
 
 # ---------------------------------------------------------------------------
-# credenziali
+# credentials
 # ---------------------------------------------------------------------------
 
 def _restrict_acl(path):
-    """ACL solo per l'utente corrente (equivalente Windows del mode 600)."""
+    """ACL for the current user only (Windows equivalent of mode 600)."""
     user = os.environ.get("USERNAME", "")
     subprocess.run(
         ["icacls", path, "/inheritance:r", f"/grant:r", f"{user}:(R,W)"],
@@ -44,7 +44,7 @@ def _restrict_acl(path):
 
 def load_credentials():
     if not os.path.exists(CRED_PATH):
-        print(f"Nessuna credenziale: esegui prima  python discord_test.py --setup")
+        print(f"No credentials: run  python discord_test.py --setup first")
         sys.exit(1)
     with open(CRED_PATH) as f:
         return json.load(f)
@@ -55,7 +55,7 @@ def save_credentials(data):
     with open(CRED_PATH, "w") as f:
         json.dump(data, f, indent=2)
     _restrict_acl(CRED_PATH)
-    print(f"Credenziali salvate in {CRED_PATH}")
+    print(f"Credentials saved to {CRED_PATH}")
 
 
 def refresh_access_token(cred):
@@ -79,7 +79,7 @@ def refresh_access_token(cred):
 
 
 # ---------------------------------------------------------------------------
-# OAuth una tantum
+# one-time OAuth
 # ---------------------------------------------------------------------------
 
 class _RedirectHandler(BaseHTTPRequestHandler):
@@ -94,10 +94,10 @@ class _RedirectHandler(BaseHTTPRequestHandler):
         params = urllib.parse.parse_qs(qs)
         if params.get("code"):
             self.__class__.auth_code = params["code"][0]
-            body = b"<h1>OK. Puoi chiudere questa pagina.</h1>"
+            body = b"<h1>OK. You can close this page.</h1>"
             self.send_response(200)
         else:
-            body = (f"Errore: {params.get('error', ['?'])[0]} - "
+            body = (f"Error: {params.get('error', ['?'])[0]} - "
                     f"{params.get('error_description', [''])[0]}").encode()
             self.send_response(400)
         self.send_header("Content-Type", "text/html; charset=utf-8")
@@ -120,7 +120,7 @@ def oauth_flow(client_id, client_secret, redirect_uri):
         "prompt": "consent",
     })
     auth_url = f"https://discord.com/api/oauth2/authorize?{params}"
-    print("Apri il consenso in Discord...")
+    print("Open the consent in Discord...")
     os.startfile(auth_url)
 
     deadline = time.time() + 180
@@ -128,7 +128,7 @@ def oauth_flow(client_id, client_secret, redirect_uri):
         time.sleep(0.3)
     server.shutdown()
     if _RedirectHandler.auth_code is None:
-        print("Timeout: nessuna autorizzazione ricevuta.")
+        print("Timeout: no authorization received.")
         sys.exit(1)
 
     body = urllib.parse.urlencode({
@@ -146,7 +146,7 @@ def oauth_flow(client_id, client_secret, redirect_uri):
             tok = json.load(resp)
     except urllib.error.HTTPError as exc:
         detail = exc.read().decode("utf-8", "replace")
-        print(f"Token exchange fallito ({exc.code}): {detail}")
+        print(f"Token exchange failed ({exc.code}): {detail}")
         sys.exit(1)
     save_credentials({
         "client_id": client_id,
@@ -155,7 +155,7 @@ def oauth_flow(client_id, client_secret, redirect_uri):
         "refresh_token": tok.get("refresh_token", ""),
         "expires_at": time.time() + tok.get("expires_in", 604800),
     })
-    print("Autorizzazione completata.")
+    print("Authorization completed.")
 
 
 # ---------------------------------------------------------------------------
@@ -171,24 +171,24 @@ def run_test(duration=10):
                 rpc.authenticate(cred["access_token"])
             except DiscordRPCError as exc:
                 if "4004" in str(exc) or "4005" in str(exc) or "4010" in str(exc):
-                    print("Token scaduto/invalido, aggiorno con refresh token...")
+                    print("Token expired/invalid, refreshing with refresh token...")
                     cred = refresh_access_token(cred)
                     rpc.authenticate(cred["access_token"])
                 else:
                     raise
-            print("Autenticato. Lettura voice settings...")
+            print("Authenticated. Reading voice settings...")
             settings = rpc.get_voice_settings()
             state = voice_state(settings)
             print(f"VOICE_SETTINGS -> {state}")
             if state is None:
-                print("Campi mute/deaf non presenti nel payload:", list(settings.keys())[:15])
+                print("mute/deaf fields not present in payload:", list(settings.keys())[:15])
 
-            print("Sottoscrivo VOICE_SETTINGS_UPDATE e ascolto per", duration, "s...")
+            print("Subscribing to VOICE_SETTINGS_UPDATE and listening for", duration, "s...")
 
             def handler(frame):
                 evt = frame.get("evt")
                 if evt == "VOICE_SETTINGS_UPDATE":
-                    print("EVENTO:", voice_state(frame.get("data", {})))
+                    print("EVENT:", voice_state(frame.get("data", {})))
                 return False
 
             stop = threading.Event()
@@ -197,24 +197,24 @@ def run_test(duration=10):
             rpc.listen(handler, stop=stop)
             stop_timer.cancel()
         except DiscordRPCError as exc:
-            print("ERRORE RPC:", exc)
+            print("RPC ERROR:", exc)
             sys.exit(1)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--setup", action="store_true", help="autorizzazione OAuth una tantum")
-    ap.add_argument("--client-id", help="Application ID dell'app Discord")
-    ap.add_argument("--client-secret", help="Client Secret dell'app Discord")
+    ap.add_argument("--setup", action="store_true", help="one-time OAuth authorization")
+    ap.add_argument("--client-id", help="Application ID of the Discord app")
+    ap.add_argument("--client-secret", help="Client Secret of the Discord app")
     ap.add_argument("--redirect", default=DEFAULT_REDIRECT,
-                    help=f"redirect URI registrato (default {DEFAULT_REDIRECT})")
+                    help=f"registered redirect URI (default {DEFAULT_REDIRECT})")
     ap.add_argument("--duration", type=int, default=10,
-                    help="secondi di ascolto eventi (default 10)")
+                    help="seconds of event listening (default 10)")
     args = ap.parse_args()
 
     if args.setup:
         if not args.client_id or not args.client_secret:
-            print("--setup richiede --client-id e --client-secret")
+            print("--setup requires --client-id and --client-secret")
             sys.exit(1)
         oauth_flow(args.client_id, args.client_secret, args.redirect)
     else:

@@ -1,11 +1,11 @@
-"""Client per la RPC locale di Discord (named pipe discord-ipc-0).
+"""Client for Discord local RPC (named pipe discord-ipc-0).
 
-Framing del protocollo locale (little-endian su tutti gli OS):
-    4 byte opcode | 4 byte lunghezza | payload JSON (UTF-8)
+Local protocol framing (little-endian on all OSes):
+    4 byte opcode | 4 byte length | JSON payload (UTF-8)
 
 Ops: HANDSHAKE=0, FRAME=1, CLOSE=2, PING=3, PONG=4.
 
-Uso tipico:
+Typical usage:
     rpc = DiscordIPC()
     rpc.connect()
     rpc.handshake(client_id)
@@ -72,7 +72,7 @@ class DiscordIPC:
                 None,
             )
         except win32file.error as exc:
-            raise DiscordRPCError(f"impossibile aprire {self.pipe}: {exc}") from exc
+            raise DiscordRPCError(f"unable to open {self.pipe}: {exc}") from exc
 
     def close(self):
         if self.handle is not None:
@@ -96,36 +96,36 @@ class DiscordIPC:
             win32file.WriteFile(self.handle, header + data)
 
     def _recv_frame(self):
-        # header: 8 byte
+        # header: 8 bytes
         while len(self._buffer) < 8:
             got, self._buffer = self._read_more(self._buffer)
             if got == 0:
-                raise DiscordRPCError("pipe chiusa da Discord")
+                raise DiscordRPCError("pipe closed by Discord")
         op, length = struct.unpack("<II", self._buffer[:8])
         self._buffer = self._buffer[8:]
         while len(self._buffer) < length:
             got, self._buffer = self._read_more(self._buffer)
             if got == 0:
-                raise DiscordRPCError("pipe chiusa durante la ricezione")
+                raise DiscordRPCError("pipe closed while receiving")
         data, self._buffer = self._buffer[:length], self._buffer[length:]
         return op, json.loads(data.decode("utf-8"))
 
     def recv_frame(self, timeout=None):
-        """Come _recv_frame ma con timeout (secondi): TimeoutError se non arriva nulla."""
+        """Like _recv_frame but with timeout (seconds): TimeoutError if nothing arrives."""
         deadline = time.monotonic() + timeout if timeout is not None else None
         while True:
             try:
                 _, available, _ = win32pipe.PeekNamedPipe(self.handle, 0)
             except win32file.error as exc:
-                # qualunque errore su PeekNamedPipe (es. ERROR_BROKEN_PIPE 109
-                # quando Discord esce) significa pipe inutilizzabile: il monitor
-                # deve riconnettersi, non restare in attesa.
+                # any error on PeekNamedPipe (e.g. ERROR_BROKEN_PIPE 109
+                # when Discord exits) means the pipe is unusable: the monitor
+                # must reconnect, not keep waiting.
                 raise DiscordRPCError(
-                    f"pipe non disponibile ({exc.winerror}): {exc}") from exc
+                    f"pipe unavailable ({exc.winerror}): {exc}") from exc
             if available:
                 return self._recv_frame()
             if deadline is not None and time.monotonic() >= deadline:
-                raise TimeoutError("nessun frame entro il timeout")
+                raise TimeoutError("no frame within the timeout")
             time.sleep(0.05)
 
     def _read_more(self, buffer):
@@ -134,9 +134,9 @@ class DiscordIPC:
         except win32file.error as exc:
             if exc.winerror == 109:  # ERROR_BROKEN_PIPE
                 return 0, buffer
-            raise DiscordRPCError(f"errore di lettura dalla pipe: {exc}") from exc
+            raise DiscordRPCError(f"pipe read error: {exc}") from exc
         if result:
-            raise DiscordRPCError(f"ReadFile fallita: {result}")
+            raise DiscordRPCError(f"ReadFile failed: {result}")
         return len(data), buffer + bytes(data)
 
     # -- protocollo --------------------------------------------------------
@@ -150,7 +150,7 @@ class DiscordIPC:
         if op == OP_CLOSE:
             code = payload.get("code")
             raise DiscordRPCError(
-                f"handshake rifiutato (code {code}): {payload.get('message', ERROR_CODES.get(code, '?'))}"
+                f"handshake rejected (code {code}): {payload.get('message', ERROR_CODES.get(code, '?'))}"
             )
         return payload
 
@@ -164,14 +164,14 @@ class DiscordIPC:
                 if frame.get("evt") == "ERROR":
                     code = frame.get("data", {}).get("code")
                     raise DiscordRPCError(
-                        f"{cmd} fallito (code {code}): "
+                        f"{cmd} failed (code {code}): "
                         f"{frame.get('data', {}).get('message', ERROR_CODES.get(code, '?'))}"
                     )
                 return frame.get("data")
             if op == OP_CLOSE:
                 code = frame.get("code")
-                raise DiscordRPCError(f"connessione chiusa (code {code}): {frame.get('message')}")
-            # frame non correlato: evento dispatch, lo passa al listener
+                raise DiscordRPCError(f"connection closed (code {code}): {frame.get('message')}")
+            # unrelated frame: dispatch event, passes it to the listener
 
     def authenticate(self, access_token):
         return self._command("AUTHENTICATE", {"access_token": access_token})
@@ -184,10 +184,10 @@ class DiscordIPC:
         return self._command("SUBSCRIBE", {}, evt=event)
 
     def listen(self, handler, stop=None):
-        """Legge frame finche' non arriva un evento che handler gestisce.
+        """Reads frames until an event handled by handler arrives.
 
-        `handler(frame)` ritorna True per fermarsi (o None per continuare).
-        `stop` e' un threading.Event opzionale, controllato ogni ~200ms.
+        `handler(frame)` returns True to stop (or None to continue).
+        `stop` is an optional threading.Event, checked every ~200ms.
         """
         while stop is None or not stop.is_set():
             try:
@@ -196,7 +196,7 @@ class DiscordIPC:
                 continue
             if op == OP_CLOSE:
                 raise DiscordRPCError(
-                    f"chiusa da Discord (code {frame.get('code')}): {frame.get('message')}"
+                    f"closed by Discord (code {frame.get('code')}): {frame.get('message')}"
                 )
             if op == OP_FRAME:
                 if frame.get("evt") and handler:
@@ -205,7 +205,7 @@ class DiscordIPC:
 
 
 def voice_state(data):
-    """Estrae {mute, deaf} dal payload voice settings, con alias di campo."""
+    """Extracts {mute, deaf} from the voice settings payload, with field aliases."""
     if not isinstance(data, dict):
         return None
     mute = data.get("mute")
