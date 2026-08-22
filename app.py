@@ -1,0 +1,193 @@
+"""DiscordLedBridge - app.py
+
+Coordina DiscordMonitor (stato voce) e KeyboardLed (colori keycap).
+Stato Discord -> LED + (opzionale) tray icon.
+
+Config: %LOCALAPPDATA%\\DiscordLedBridge\\config.json
+Credenziali: %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json (setup via discord_test.py)
+
+Esegui:  python app.py [--no-tray] [--config PATH]
+"""
+
+import argparse
+import json
+import os
+import sys
+import threading
+
+from PIL import Image, ImageDraw
+
+from discord_monitor import DiscordMonitor
+from keyboard_led import DeviceUnavailable, KeyboardLed
+
+APP_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "DiscordLedBridge")
+PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_CONFIG_PATH = os.path.join(PROJECT_DIR, "config.json")
+
+DEFAULT_CONFIG = {
+    "tray_icon": True,
+    "led_gap_seconds": 0.25,
+    "mode": "global",
+    "group_keys": [0, 1],
+    "colors": {
+        "ok": "#00F0FF",
+        "mic_muted": "#FFFF00",
+        "deafened": "#FF0000",
+    },
+    "idle_keys": [2, 3],
+}
+
+TRAY_COLORS = {
+    (False, False): "#00F0FF",  # tutto ok
+    (True, False):  "#FFFF00",  # solo mic muto
+    (True, True):   "#FF0000",  # audio mutato
+    (False, True):  "#FF0000",  # solo cuffie mute
+}
+
+
+def hex_rgb(value):
+    text = str(value).lstrip("#")
+    if len(text) == 3:
+        text = "".join(c * 2 for c in text)
+    return int(text[0:2], 16), int(text[2:4], 16), int(text[4:6], 16)
+
+
+def _deep_merge(base, override):
+    out = dict(base)
+    for key, value in override.items():
+        if isinstance(value, dict) and isinstance(out.get(key), dict):
+            out[key] = _deep_merge(out[key], value)
+        else:
+            out[key] = value
+    return out
+
+
+def load_config(path):
+    config = _deep_merge(DEFAULT_CONFIG, {})
+    if os.path.exists(path):
+        with open(path) as f:
+            config = _deep_merge(config, json.load(f))
+    return config
+
+
+def save_config(config, path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(config, f, indent=2)
+
+
+def make_icon(color):
+    img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    d.ellipse((6, 6, 58, 58), fill=color + "ff")
+    return img
+
+
+class App:
+    def __init__(self, config, use_tray):
+        self.config = config
+        self.use_tray = use_tray
+        self.state = None
+        self.led = KeyboardLed(gap=config["led_gap_seconds"])
+        self.tray = None
+        self._log_lock = threading.Lock()
+        if use_tray:
+            try:
+                import pystray
+                self.pystray = pystray
+                self.tray = pystray.Icon(
+                    "DiscordLedBridge",
+                    make_icon(TRAY_COLORS[(False, False)]),
+                    "DiscordLedBridge",
+                    menu=pystray.Menu(pystray.MenuItem("Esci", self._on_quit)),
+                )
+            except Exception as exc:
+                print(f"tray icon non disponibile ({exc}), proseguo senza")
+                self.use_tray = False
+        self.monitor = DiscordMonitor(on_state=self._on_state, on_log=self._on_log)
+
+    # -- log ----------------------------------------------------------------
+
+    def _on_log(self, msg):
+        with self._log_lock:
+            print(f"[monitor] {msg}")
+
+    # -- stati ---------------------------------------------------------------
+
+    def _on_state(self, state):
+        self.state = state
+        self._apply()
+
+    def _apply(self):
+        state = self.state or {"mute": False, "deaf": False}
+        cfg = self.config
+        if cfg["mode"] == "global":
+            if state["deaf"]:
+                color = cfg["colors"]["deafened"]
+            elif state["mute"]:
+                color = cfg["colors"]["mic_muted"]
+            else:
+                color = cfg["colors"]["ok"]
+            colors = {idx: hex_rgb(color) for idx in cfg["group_keys"]}
+            for idx in cfg.get("idle_keys", []):
+                colors[idx] = (0, 0, 0)
+        self.led.set_colors(colors)
+        if self.tray is not None:
+            self.tray.icon = make_icon(TRAY_COLORS[(state["mute"], state["deaf"])])
+        with self._log_lock:
+            if state["deaf"]:
+                label = "AUDIO MUTATO (deafen)"
+            elif state["mute"]:
+                label = "MIC MUTO"
+            else:
+                label = "tutto ok"
+            print(f"[stato] {label}")
+
+    # -- ciclo di vita --------------------------------------------------------
+
+    def run(self):
+        self._apply()
+        self.monitor.start()
+        if self.use_tray and self.tray is not None:
+            self.tray.run()
+        else:
+            try:
+                threading.Event().wait()
+            except KeyboardInterrupt:
+                pass
+        self.shutdown()
+
+    def _on_quit(self, icon, item):
+        icon.stop()
+
+    def shutdown(self):
+        self.monitor.stop()
+        try:
+            self.led.close()
+        except Exception:
+            pass
+
+
+def main():
+    ap = argparse.ArgumentParser(description="DiscordLedBridge")
+    ap.add_argument("--no-tray", action="store_true", help="disabilita la tray icon")
+    ap.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="percorso config.json")
+    args = ap.parse_args()
+
+    config = load_config(args.config)
+    if not os.path.exists(args.config):
+        save_config(config, args.config)
+        print(f"Config di default creato in {args.config}")
+    use_tray = config["tray_icon"] and not args.no_tray
+
+    print(f"DiscordLedBridge avviato (config: {args.config})")
+    try:
+        App(config, use_tray).run()
+    except DeviceUnavailable as exc:
+        print(f"ERRORE: {exc}")
+        print("Collega la SIDE-KEYBOARD e riprova.")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
