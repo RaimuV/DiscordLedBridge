@@ -1,4 +1,4 @@
-# DiscordLedBridge
+﻿# DiscordLedBridge
 
 Mirrors your Discord voice state (mic muted / headphones muted) onto the per-key
 LEDs of a **SIDE-KEYBOARD** macropad (SDINNOVATION, VID `0816` / PID `246E`,
@@ -30,11 +30,11 @@ python -m pip install -r requirements.txt
 ## OAuth setup (one-time)
 
 1. Create an app at <https://discord.com/developers> (New Application).
-2. In **OAuth2** → **Redirects**, add `http://localhost:53123`.
+2. In **OAuth2** â†’ **Redirects**, add `http://localhost:53123`.
 3. Run the one-time authorization:
 
 ```powershell
-python discord_test.py --setup --client-id <ApplicationID> --client-secret <ClientSecret>
+python src\discord_test.py --setup --client-id <ApplicationID> --client-secret <ClientSecret>
 ```
 
    A consent window opens inside Discord (click Authorize). Credentials are saved
@@ -44,7 +44,7 @@ python discord_test.py --setup --client-id <ApplicationID> --client-secret <Clie
 4. Verify the voice state can be read:
 
 ```powershell
-python discord_test.py
+python src\discord_test.py
 ```
 
    It prints `VOICE_SETTINGS -> {mute, deaf}` and stays listening for changes.
@@ -52,7 +52,7 @@ python discord_test.py
 ## Running the bridge
 
 ```powershell
-python app.py
+python src\app.py
 ```
 
 The bridge switches the pad to Custom lighting, colors the keycaps and keeps
@@ -95,13 +95,13 @@ active) and the app keeps running. Toggling `tray_icon` still requires a restart
 
 ```powershell
 # read-only dump of the pad state (no writes)
-python keyboard_test.py --probe-only
+python src\keyboard_test.py --probe-only
 
 # color keycaps 0,1,2 and leave them on
-python keyboard_test.py --keep --color "#00F0FF"
+python src\keyboard_test.py --keep --color "#00F0FF"
 
 # restore the previous lighting mode (from led_backup.json)
-python keyboard_test.py --restore
+python src\keyboard_test.py --restore
 ```
 
 ## Technical notes

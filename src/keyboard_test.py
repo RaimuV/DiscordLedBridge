@@ -11,6 +11,7 @@ Usage:  python keyboard_test.py [--probe-only] [--no-write]
 
 import argparse
 import json
+import os
 import sys
 import time
 
@@ -21,7 +22,8 @@ PID = 0x246E
 USAGE_PAGE = 0xFF00
 USAGE = 0x02
 REPORT_SIZE = 64
-BACKUP_PATH = "led_backup.json"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BACKUP_PATH = os.path.join(PROJECT_ROOT, "led_backup.json")
 
 G = 0x06  # config group
 

@@ -21,7 +21,7 @@ from discord_monitor import DiscordMonitor
 from keyboard_led import DeviceUnavailable, KeyboardLed
 
 APP_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "DiscordLedBridge")
-PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_CONFIG_PATH = os.path.join(PROJECT_DIR, "config.json")
 
 DEFAULT_CONFIG = {
