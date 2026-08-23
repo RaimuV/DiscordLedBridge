@@ -1,3 +1,10 @@
 __pycache__/
 *.pyc
 led_backup.json
+
+# local context / vibecoding / opencode files (kept out of the public repo)
+CONTEXT.md
+PLAN.md
+contexts/
+.opencode/
+AGENTS.md
