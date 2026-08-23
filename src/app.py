@@ -3,10 +3,10 @@
 Coordinates DiscordMonitor (voice state) and KeyboardLed (keycap colors).
 Discord state -> LED + (optional) tray icon.
 
-Config: %LOCALAPPDATA%\\DiscordLedBridge\\config.json
+Config: config.json in the project root (next to the app)
 Credentials: %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json (setup via discord_test.py)
 
-Run:  python app.py [--no-tray] [--config PATH]
+Run:  python src/app.py [--no-tray] [--config PATH]
 """
 
 import argparse

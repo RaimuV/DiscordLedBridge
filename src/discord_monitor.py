@@ -60,7 +60,7 @@ class DiscordMonitor:
                 self._log(f"RPC: {exc}")
                 backoff = self._sleep_backoff(backoff)
             except SystemExit:
-                self._log("credentials not configured (run: python discord_test.py --setup)")
+                self._log("credentials not configured (run: python src/discord_test.py --setup)")
                 backoff = self._sleep_backoff(backoff)
             except Exception as exc:
                 self._log(f"monitor error: {exc}")

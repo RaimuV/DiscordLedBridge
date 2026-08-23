@@ -20,7 +20,8 @@ Keycaps 3-4 stay off. Everything is configurable via `config.json`.
 
 ## Requirements
 
-- Python 3.12 with: `hidapi`, `pywin32`, `psutil`, `pystray`, `Pillow`
+- **Windows** (uses pywin32 named pipes and HID)
+- Python 3.12 with: `hidapi`, `pywin32`, `pystray`, `Pillow`
 - Discord desktop running
 
 ```powershell
@@ -30,7 +31,7 @@ python -m pip install -r requirements.txt
 ## OAuth setup (one-time)
 
 1. Create an app at <https://discord.com/developers> (New Application).
-2. In **OAuth2** â†’ **Redirects**, add `http://localhost:53123`.
+2. In **OAuth2** → **Redirects**, add `http://localhost:53123`.
 3. Run the one-time authorization:
 
 ```powershell

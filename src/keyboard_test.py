@@ -6,7 +6,7 @@ Verifies the SDCX protocol on Windows (hidapi):
   3. identifies the real keys and tries to light up ONE LED in Custom mode
   4. restores the previous light mode and colors
 
-Usage:  python keyboard_test.py [--probe-only] [--no-write]
+Usage:  python src/keyboard_test.py [--probe-only] [--restore] [--keep] [--key N] [--color #RRGGBB]
 """
 
 import argparse

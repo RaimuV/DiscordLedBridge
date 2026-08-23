@@ -1,5 +1,4 @@
 hidapi
 pywin32
-psutil
 pystray
 Pillow

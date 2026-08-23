@@ -1,8 +1,8 @@
 """Milestone A - Discord local RPC test.
 
-  python discord_test.py --setup --client-id X --client-secret Y
+  python src/discord_test.py --setup --client-id X --client-secret Y
       one-time OAuth authorization (consent inside Discord), saves credentials
-  python discord_test.py
+  python src/discord_test.py
       connects, reads VOICE_SETTINGS, prints mute/deafen, listens for 10s
 
 Credentials live in %LOCALAPPDATA%\\DiscordLedBridge\\credentials.json with ACL
@@ -44,7 +44,7 @@ def _restrict_acl(path):
 
 def load_credentials():
     if not os.path.exists(CRED_PATH):
-        print(f"No credentials: run  python discord_test.py --setup first")
+        print(f"No credentials: run  python src/discord_test.py --setup first")
         sys.exit(1)
     with open(CRED_PATH) as f:
         return json.load(f)
