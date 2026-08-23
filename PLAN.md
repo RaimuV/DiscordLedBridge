@@ -105,7 +105,8 @@ e valida subito l'hardware).
 Confermate il 23/08/2026:
 
 1. **Tray icon**: SÌ, spia a schermo opzionale via config ✅
-2. **Auto-start**: per ora **avvio manuale**; Task Scheduler eventualmente in seguito ✅
+2. **Auto-start**: avvio manuale all'inizio; poi **Task Scheduler configurato il 23/08/2026**
+   (task `DiscordLedBridge`, logon, `pythonw.exe`, retry su crash, log in `%LOCALAPPDATA%\DiscordLedBridge\app.log`) ✅
 3. **Semantica "cuffie mute"**: `deafen` = cuffie mute (disattiva l'audio in uscita),
    mute controllato da UI Discord o dal pulsante; mapping invariato
    (`mute+deafen` → rosso) ✅

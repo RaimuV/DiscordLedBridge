@@ -60,6 +60,29 @@ The bridge switches the pad to Custom lighting, colors the keycaps and keeps
 listening. Optional tray icon (disable it in `config.json` or with `--no-tray`).
 On exit (tray menu "Quit" or Ctrl+C) it restores the previous lighting mode.
 
+## Autostart with Windows
+
+A scheduled task starts the bridge at logon (no console window, `pythonw.exe`),
+with automatic retry on failure:
+
+```powershell
+# create (done on this machine)
+Register-ScheduledTask -TaskName "DiscordLedBridge" `
+  -Action (New-ScheduledTaskAction -Execute "C:\Python312\pythonw.exe" `
+    -Argument "D:\projects\side-keyboard-project\src\app.py" `
+    -WorkingDirectory "D:\projects\side-keyboard-project") `
+  -Trigger (New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME) `
+  -Settings (New-ScheduledTaskSettingsSet -RestartCount 5 `
+    -RestartInterval (New-TimeSpan -Minutes 1) `
+    -ExecutionTimeLimit ([TimeSpan]::Zero))
+
+# disable autostart
+Unregister-ScheduledTask -TaskName "DiscordLedBridge"
+```
+
+When launched this way, logs go to
+`%LOCALAPPDATA%\DiscordLedBridge\app.log` (no console window).
+
 ## Configuration
 
 `config.json` lives in the project folder (auto-created on first run):

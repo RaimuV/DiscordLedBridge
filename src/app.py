@@ -202,6 +202,14 @@ class App:
 
 
 def main():
+    # senza console (pythonw.exe) stdout/stderr sono None: dirotta su file log
+    if sys.stdout is None:
+        os.makedirs(APP_DIR, exist_ok=True)
+        log_path = os.path.join(APP_DIR, "app.log")
+        # buffering=1 = line-buffered, cosi' i log sono visibili in tempo reale
+        sys.stdout = open(log_path, "a", encoding="utf-8", buffering=1)
+        sys.stderr = sys.stdout
+
     ap = argparse.ArgumentParser(description="DiscordLedBridge")
     ap.add_argument("--no-tray", action="store_true", help="disable the tray icon")
     ap.add_argument("--config", default=DEFAULT_CONFIG_PATH, help="config.json path")
