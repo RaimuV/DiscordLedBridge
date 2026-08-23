@@ -84,6 +84,13 @@ On exit (tray menu "Quit" or Ctrl+C) it restores the previous lighting mode.
 - `led_gap_seconds`: pause between consecutive LED writes. The device drops
   back-to-back writes, so don't go below ~0.2s.
 
+### Hot reload
+
+`config.json` is watched while the app runs: save it and `colors`, `group_keys`,
+`idle_keys`, `mode` and `led_gap_seconds` are re-applied automatically (check the
+`[config] reloaded` log). Invalid JSON is ignored (the previous settings stay
+active) and the app keeps running. Toggling `tray_icon` still requires a restart.
+
 ## Testing tools
 
 ```powershell

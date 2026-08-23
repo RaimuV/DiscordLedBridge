@@ -27,6 +27,7 @@ class KeyboardLed:
         self._lock = threading.Lock()
         self._pending = {}          # {index: (r,g,b)} to apply
         self._last = {}             # last colors applied per index
+        self._reaffirm = False      # re-write the colors once after a short delay
         self._running = True
         self._worker = threading.Thread(target=self._run, daemon=True)
         self._open()
@@ -105,8 +106,26 @@ class KeyboardLed:
                         self._set_color_direct(index, rgb)
                         self._last[index] = rgb
                         time.sleep(self.gap)
+                    # il device a volte droppa una scrittura isolata: riscrivi
+                    # il gruppo dopo ~1s, ma solo se non e' arrivato nuovo stato
+                    self._reaffirm = True
                 except Exception:
-                    # device disconnected: try to reopen, then reapply everything
+                    # device sconnesso: tenta di riaprire, poi riapplica tutto
+                    self._reopen()
+            elif self._reaffirm:
+                time.sleep(1.0)
+                self._reaffirm = False
+                with self._lock:
+                    if self._pending:
+                        continue  # nuovo stato nel frattempo: lo gestira' il prossimo giro
+                    reaffirm = dict(self._last)
+                try:
+                    for index, rgb in reaffirm.items():
+                        if not self._running:
+                            break
+                        self._set_color_direct(index, rgb)
+                        time.sleep(self.gap)
+                except Exception:
                     self._reopen()
             else:
                 time.sleep(0.05)

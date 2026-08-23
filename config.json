@@ -2,11 +2,17 @@
   "tray_icon": true,
   "led_gap_seconds": 0.25,
   "mode": "global",
-  "group_keys": [0, 1],
+  "group_keys": [
+    0,
+    1
+  ],
   "colors": {
     "ok": "#00F0FF",
     "mic_muted": "#FFFF00",
     "deafened": "#FF0000"
   },
-  "idle_keys": [2, 3]
+  "idle_keys": [
+	2,
+	3
+  ]
 }

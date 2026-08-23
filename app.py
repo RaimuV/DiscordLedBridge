@@ -65,7 +65,8 @@ def _deep_merge(base, override):
 def load_config(path):
     config = _deep_merge(DEFAULT_CONFIG, {})
     if os.path.exists(path):
-        with open(path) as f:
+        # utf-8-sig tolera il BOM che alcuni editor Windows (es. Notepad) aggiungono
+        with open(path, encoding="utf-8-sig") as f:
             config = _deep_merge(config, json.load(f))
     return config
 
@@ -84,8 +85,13 @@ def make_icon(color):
 
 
 class App:
-    def __init__(self, config, use_tray):
+    def __init__(self, config, config_path, use_tray):
         self.config = config
+        self.config_path = config_path
+        self._config_mtime = (
+            os.path.getmtime(config_path) if os.path.exists(config_path) else None
+        )
+        self._stop = threading.Event()
         self.use_tray = use_tray
         self.state = None
         self.led = KeyboardLed(gap=config["led_gap_seconds"])
@@ -111,6 +117,31 @@ class App:
     def _on_log(self, msg):
         with self._log_lock:
             print(f"[monitor] {msg}")
+
+    # -- config hot-reload ---------------------------------------------------
+
+    def _watch_config(self):
+        while not self._stop.wait(timeout=1.0):
+            try:
+                mtime = os.path.getmtime(self.config_path)
+            except OSError:
+                continue
+            if mtime == self._config_mtime:
+                continue
+            self._config_mtime = mtime
+            try:
+                new = load_config(self.config_path)
+            except (OSError, ValueError) as exc:
+                with self._log_lock:
+                    print(f"[config] invalid JSON, keeping previous config ({exc})")
+                continue
+            gap_changed = new["led_gap_seconds"] != self.config["led_gap_seconds"]
+            self.config = new
+            if gap_changed:
+                self.led.gap = new["led_gap_seconds"]
+            self._apply()
+            with self._log_lock:
+                print("[config] reloaded - settings applied")
 
     # -- stati ---------------------------------------------------------------
 
@@ -148,6 +179,7 @@ class App:
     def run(self):
         self._apply()
         self.monitor.start()
+        threading.Thread(target=self._watch_config, daemon=True).start()
         if self.use_tray and self.tray is not None:
             self.tray.run()
         else:
@@ -161,6 +193,7 @@ class App:
         icon.stop()
 
     def shutdown(self):
+        self._stop.set()
         self.monitor.stop()
         try:
             self.led.close()
@@ -182,7 +215,7 @@ def main():
 
     print(f"DiscordLedBridge started (config: {args.config})")
     try:
-        App(config, use_tray).run()
+        App(config, args.config, use_tray).run()
     except DeviceUnavailable as exc:
         print(f"ERROR: {exc}")
         print("Connect the SIDE-KEYBOARD and try again.")
