@@ -90,7 +90,6 @@ When launched this way, logs go to
 ```json
 {
   "tray_icon": true,
-  "led_gap_seconds": 0.25,
   "mode": "global",
   "group_keys": [0, 1],
   "colors": {
@@ -105,13 +104,15 @@ When launched this way, logs go to
 - `group_keys`: keycap indices that show the global status.
 - `colors`: color for each state (`ok`, `mic_muted`, `deafened`).
 - `idle_keys`: indices kept off.
-- `led_gap_seconds`: pause between consecutive LED writes. The device drops
-  back-to-back writes, so don't go below ~0.2s.
+- `tray_icon`: show a tray icon that mirrors the LED state.
+
+All LEDs are written together with a single **bulk RGB report**, so the keycaps
+switch state at the same time instead of one after another.
 
 ### Hot reload
 
 `config.json` is watched while the app runs: save it and `colors`, `group_keys`,
-`idle_keys`, `mode` and `led_gap_seconds` are re-applied automatically (check the
+`idle_keys` and `mode` are re-applied automatically (check the
 `[config] reloaded` log). Invalid JSON is ignored (the previous settings stay
 active) and the app keeps running. Toggling `tray_icon` still requires a restart.
 
@@ -123,6 +124,9 @@ python src\keyboard_test.py --probe-only
 
 # color keycaps 0,1,2 and leave them on
 python src\keyboard_test.py --keep --color "#00F0FF"
+
+# write keycaps 0-3 with a single bulk report and leave them on
+python src\keyboard_test.py --bulk --color "#00F0FF"
 
 # restore the previous lighting mode (from led_backup.json)
 python src\keyboard_test.py --restore
@@ -136,6 +140,9 @@ python src\keyboard_test.py --restore
 - Protocol reverse-engineered from `parsaj-dev/sdcx-keypad` (MIT): vendor
   interface, usage page `0xFF00`, 64-byte reports.
 - On Windows, HID writes need the report-ID 0 prefix (`[0x00] + 64 bytes`).
+- The device drops isolated per-key writes, so the bridge uses the **bulk RGB
+  command (`[18]`)**: one report carries every key's color and all LEDs change
+  together, then the group is re-affirmed ~1s later.
 - The per-key color read-back (`[19]`) is unreliable on odd indices: the correct
   verification is visual.
 

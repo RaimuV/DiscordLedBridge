@@ -1,6 +1,5 @@
 {
   "tray_icon": true,
-  "led_gap_seconds": 0.25,
   "mode": "global",
   "group_keys": [
     0,

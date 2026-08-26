@@ -26,7 +26,6 @@ DEFAULT_CONFIG_PATH = os.path.join(PROJECT_DIR, "config.json")
 
 DEFAULT_CONFIG = {
     "tray_icon": True,
-    "led_gap_seconds": 0.25,
     "mode": "global",
     "group_keys": [0, 1],
     "colors": {
@@ -94,7 +93,7 @@ class App:
         self._stop = threading.Event()
         self.use_tray = use_tray
         self.state = None
-        self.led = KeyboardLed(gap=config["led_gap_seconds"])
+        self.led = KeyboardLed()
         self.tray = None
         self._log_lock = threading.Lock()
         if use_tray:
@@ -135,10 +134,7 @@ class App:
                 with self._log_lock:
                     print(f"[config] invalid JSON, keeping previous config ({exc})")
                 continue
-            gap_changed = new["led_gap_seconds"] != self.config["led_gap_seconds"]
             self.config = new
-            if gap_changed:
-                self.led.gap = new["led_gap_seconds"]
             self._apply()
             with self._log_lock:
                 print("[config] reloaded - settings applied")

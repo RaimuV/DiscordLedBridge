@@ -1,19 +1,18 @@
 """SIDE-KEYBOARD LED control.
 
-The device drops per-key writes that are too close together (~250ms), so every
-write goes through a worker thread that processes it alone with a pause.
-On startup it saves the current light mode and restores it at session end.
+The device drops back-to-back per-key writes, so colors are written with the
+bulk RGB command: one report carries every key's color and the LEDs change
+together. On startup it saves the current light mode and restores it at
+session end.
 """
 
 import threading
 import time
 
 from keyboard_test import (C_GET_LIGHT, C_GET_MODE_DEFAULTS, C_SET_LIGHT,
-                           C_SET_RGB_SINGLE, G, HidTransport,
+                           C_SET_RGB_BULK, G, HidTransport,
                            find_config_interface, light_block, parse_light,
                            u16le)
-
-DEFAULT_GAP = 0.25
 
 
 class DeviceUnavailable(Exception):
@@ -21,8 +20,7 @@ class DeviceUnavailable(Exception):
 
 
 class KeyboardLed:
-    def __init__(self, gap=DEFAULT_GAP):
-        self.gap = gap
+    def __init__(self):
         self.transport = None
         self._lock = threading.Lock()
         self._pending = {}          # {index: (r,g,b)} to apply
@@ -81,17 +79,36 @@ class KeyboardLed:
 
     # -- scrittura colori ---------------------------------------------------
 
-    def _set_color_direct(self, index, rgb):
-        r, g, b = rgb
-        self.transport.write([G, C_SET_RGB_SINGLE, 3, *u16le(index * 3),
-                              0, 0, 0, r, g, b])
-
     def set_colors(self, colors):
         """Queues colors {index: (r,g,b)}; applies only the changed indices."""
         with self._lock:
             for index, rgb in colors.items():
                 if self._last.get(index) != rgb:
                     self._pending[index] = rgb
+
+    def _apply_bulk(self, colors):
+        """Writes the given colors in one bulk RGB report, so all LEDs change
+        together. Keys kept from `_last` within the span keep their color."""
+        merged = dict(self._last)
+        merged.update(colors)
+        span = max(merged) + 1
+        table = bytearray(span * 3)
+        for index, (r, g, b) in merged.items():
+            table[3 * index : 3 * index + 3] = bytes((r, g, b))
+        total = len(table)
+        sent = 0
+        chunk_index = 0
+        while sent < total:
+            chunk = table[sent : sent + 56]
+            # wire byte 1 = data bytes in this chunk + 3 (59 on full chunks)
+            header_len = 59
+            if sent + len(chunk) >= total and total % 56 > 0:
+                header_len = total % 56 + 3
+            self.transport.write([G, C_SET_RGB_BULK, header_len,
+                                  *u16le(56 * chunk_index), 0, 0, 0, *chunk])
+            sent += len(chunk)
+            chunk_index += 1
+        self._last.update(colors)
 
     def _run(self):
         while self._running:
@@ -100,14 +117,9 @@ class KeyboardLed:
                 self._pending.clear()
             if pending:
                 try:
-                    for index, rgb in pending.items():
-                        if not self._running:
-                            break
-                        self._set_color_direct(index, rgb)
-                        self._last[index] = rgb
-                        time.sleep(self.gap)
-                    # il device a volte droppa una scrittura isolata: riscrivi
-                    # il gruppo dopo ~1s, ma solo se non e' arrivato nuovo stato
+                    self._apply_bulk(pending)
+                    # il device a volte droppa una scrittura: riscrivi il
+                    # gruppo dopo ~1s, ma solo se non e' arrivato nuovo stato
                     self._reaffirm = True
                 except Exception:
                     # device sconnesso: tenta di riaprire, poi riapplica tutto
@@ -120,11 +132,7 @@ class KeyboardLed:
                         continue  # nuovo stato nel frattempo: lo gestira' il prossimo giro
                     reaffirm = dict(self._last)
                 try:
-                    for index, rgb in reaffirm.items():
-                        if not self._running:
-                            break
-                        self._set_color_direct(index, rgb)
-                        time.sleep(self.gap)
+                    self._apply_bulk(reaffirm)
                 except Exception:
                     self._reopen()
             else:

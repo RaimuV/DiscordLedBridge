@@ -216,6 +216,8 @@ def main():
     ap.add_argument("--color", default="#00F0FF", help="test color in #rrggbb")
     ap.add_argument("--keep", action="store_true",
                     help="after the test keep the LEDs on instead of restoring")
+    ap.add_argument("--bulk", action="store_true",
+                    help="write keycaps 0-3 with a single bulk report and leave them on")
     args = ap.parse_args()
 
     info = find_config_interface()
@@ -317,6 +319,18 @@ def main():
             block[6] = 0
         print("Setting Custom mode:", defaults)
         tr.request([G, C_SET_LIGHT, 11, 0, 0, *block])
+
+        if args.bulk:
+            # single report: [G, 18, len, T(offset), 0,0,0, r,g,b x keys]
+            table = bytearray(3 * 4)
+            for idx in range(4):
+                table[3 * idx : 3 * idx + 3] = bytes((r, g, b))
+            tr.write([G, C_SET_RGB_BULK, len(table) + 3, *u16le(0), 0, 0, 0, *table])
+            print(f"Bulk write: keycaps 0-3 -> #{r:02x}{g:02x}{b:02x} in one report "
+                  "(check they all change together)")
+            print("LEDs left on. To restore the previous light:")
+            print("  python keyboard_test.py --restore")
+            return
 
         # 8. write color and verify read-back from the per-key table
         def set_key_color(idx, rgb):
