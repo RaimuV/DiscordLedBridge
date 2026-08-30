@@ -18,6 +18,7 @@ import threading
 from PIL import Image, ImageDraw
 
 from discord_monitor import DiscordMonitor
+from keyboard_hook import KeyboardHook
 from keyboard_led import DeviceUnavailable, KeyboardLed
 
 APP_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "."), "DiscordLedBridge")
@@ -93,8 +94,10 @@ class App:
         self._stop = threading.Event()
         self.use_tray = use_tray
         self.state = None
+        self.leds_on = True
         self.led = KeyboardLed()
         self.tray = None
+        self.hook = KeyboardHook(self._on_knob_press)
         self._log_lock = threading.Lock()
         if use_tray:
             try:
@@ -145,9 +148,23 @@ class App:
         self.state = state
         self._apply()
 
+    def _on_knob_press(self):
+        self.leds_on = not self.leds_on
+        self._apply()
+        with self._log_lock:
+            print(f"[knob] LEDs {'ON' if self.leds_on else 'OFF'}")
+
     def _apply(self):
         state = self.state or {"mute": False, "deaf": False}
         cfg = self.config
+        if not self.leds_on:
+            colors = {}
+            for idx in cfg["group_keys"]:
+                colors[idx] = (0, 0, 0)
+            for idx in cfg.get("idle_keys", []):
+                colors[idx] = (0, 0, 0)
+            self.led.set_colors(colors)
+            return
         if cfg["mode"] == "global":
             if state["deaf"]:
                 color = cfg["colors"]["deafened"]
@@ -174,6 +191,11 @@ class App:
 
     def run(self):
         self._apply()
+        try:
+            self.hook.install()
+        except Exception as exc:
+            with self._log_lock:
+                print(f"[knob] hook unavailable ({exc}), LED toggle disabled")
         self.monitor.start()
         threading.Thread(target=self._watch_config, daemon=True).start()
         if self.use_tray and self.tray is not None:
@@ -190,6 +212,10 @@ class App:
 
     def shutdown(self):
         self._stop.set()
+        try:
+            self.hook.uninstall()
+        except Exception:
+            pass
         self.monitor.stop()
         try:
             self.led.close()
