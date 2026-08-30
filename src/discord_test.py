@@ -170,7 +170,7 @@ def run_test(duration=10):
             try:
                 rpc.authenticate(cred["access_token"])
             except DiscordRPCError as exc:
-                if "4004" in str(exc) or "4005" in str(exc) or "4010" in str(exc):
+                if "4004" in str(exc) or "4005" in str(exc) or "4009" in str(exc) or "4010" in str(exc):
                     print("Token expired/invalid, refreshing with refresh token...")
                     cred = refresh_access_token(cred)
                     rpc.authenticate(cred["access_token"])

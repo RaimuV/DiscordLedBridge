@@ -15,7 +15,7 @@ from discord_test import load_credentials, refresh_access_token
 BACKOFF_START = 2.0
 BACKOFF_MAX = 30.0
 
-_TOKEN_ERRORS = ("4004", "4005", "4010")
+_TOKEN_ERRORS = ("4004", "4005", "4009", "4010")
 
 
 class DiscordMonitor:
@@ -85,7 +85,14 @@ class DiscordMonitor:
             if any(code in str(exc) for code in _TOKEN_ERRORS):
                 self._log("token expired, refreshing with refresh token")
                 cred = refresh_access_token(cred)
-                rpc.authenticate(cred["access_token"])
+                try:
+                    rpc.authenticate(cred["access_token"])
+                except DiscordRPCError as exc2:
+                    if any(code in str(exc2) for code in _TOKEN_ERRORS):
+                        self._log(
+                            "access AND refresh token both invalid/expired: "
+                            "run  python src/discord_test.py --setup  to re-authorize")
+                    raise
             else:
                 raise
 

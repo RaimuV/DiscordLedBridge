@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 led_backup.json
+start_discord_led_bridge.bat
 
 # local context / vibecoding / opencode files (kept out of the public repo)
 CONTEXT.md
